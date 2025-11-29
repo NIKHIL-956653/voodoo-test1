@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Neon Chain Reaction</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <main class="wrap">
+    <h1>Neon Chain Reaction</h1>
+
+    <div class="toolbar">
+      <span id="standardControls">
+          <label>Grid
+            <select id="gridSelect">
+              <option value="6x6">6×6</option>
+              <option value="7x7">7×7</option>
+              <option value="8x8">8×8</option>
+              <option value="9x9" selected>9×9</option>
+              <option value="10x10">10×10</option>
+            </select>
+          </label>
+
+          <label>Players
+            <select id="playerCountSelect">
+              <option value="2" selected>2</option>
+              <option value="3">3</option>
+              <option value="4">4</option>
+              <option value="5">5</option>
+              <option value="6">6</option>
+            </select>
+          </label>
+
+          <label>AI Speed
+            <select id="aiSpeedSelect">
+              <option value="300">Fast ⚡</option>
+              <option value="1000" selected>Normal</option>
+              <option value="2000">Slow 🐢</option>
+            </select>
+          </label>
+      </span>
+
+      <label id="modeLabel">Mode:</label>
+      <select id="gameModeSelect" style="margin-left: 10px;">
+        <option value="normal" selected>Normal</option>
+        <option value="timeAttack">Time Attack</option>
+        <option value="saga">Saga Mode</option>
+        <option value="bliss">Bliss Mode</option>
+      </select>
+
+      <span id="timerContainer" style="display:none; margin-left: 10px;">
+        <label id="timerLabel">Timer:</label>
+        <select id="timerSelect" style="margin-left: 5px;">
+            <option value="120" selected>2m</option>
+            <option value="300">5m</option>
+        </select>
+        <span id="timerDisplay" style="margin-left:10px; color:#47f2ff; font-weight:bold;">
+            <span id="timeLeft">120</span> <span id="timeUnit">s</span>
+        </span>
+      </span>
+
+      <button id="newGameBtn" class="btn">New Game</button>
+      <button id="undoBtn" class="btn">Undo</button>
+    </div>
+
+    <div class="toolbar" id="levelSelectorContainer" style="display: none; margin-top: 15px;">
+      <label>
+        Level: <select id="levelSelect"></select>
+      </label>
+      <span id="levelNameDisplay" style="margin-left: 20px; font-weight: 600; color: #fff;"></span>
+    </div>
+
+    <div id="playerSettingsContainer" class="player-settings-container"></div>
+
+    <div class="status">
+      <span id="turnBadge" class="badge"></span>
+      <span id="statusText">Loading…</span>
+    </div>
+
+    <div id="scoreBoard" style="margin-top: 14px; color: #47f2ff; font-weight: 600;">
+      Scores: <span id="scoreDisplay"></span>
+    </div>
+
+    <div id="board" class="board"></div>
+
+    <p><small>Tap cells to play. Up to 6 human or AI players, local turns.</small></p>
+  </main>
+
+  <div id="gameModal" class="modal-overlay" style="display: none;">
+    <div class="modal-content">
+      <h2 id="modalTitle" class="modal-title">Game Over</h2>
+      <div id="modalBody" class="modal-body"></div>
+      <div class="modal-actions">
+        <button id="modalReplayBtn" class="modal-btn secondary">Play Again</button>
+        <button id="modalNextBtn" class="modal-btn primary">Next Level ➡</button>
+      </div>
+    </div>
+  </div>
+
+  <script type="module" src="js/game.js"></script>
+</body>
+</html>

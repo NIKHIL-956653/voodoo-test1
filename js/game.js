@@ -1,0 +1,631 @@
+import { playSound } from "./sound.js";
+import { capacity, neighbors, drawCell } from "./board.js";
+import { buildPlayerSettings } from "./player.js";
+import { SAGA_LEVELS, BLISS_LEVELS } from "./levels.js"; 
+import { makeAIMove } from "./ai.js";       
+import { makeSagaAIMove } from "./ai2.js"; 
+// NEW: Import the Visual Effects
+import { spawnParticles, triggerShake, triggerFlash, setBackgroundPulse } from "./fx.js"; 
+
+const $ = s => document.querySelector(s);
+const scoreDisplay = $("#scoreDisplay");
+const boardEl = $("#board"),
+  statusText = $("#statusText"),
+  turnBadge = $("#turnBadge"),
+  gridSelect = $("#gridSelect"),
+  newBtn = $("#newGameBtn"),
+  undoBtn = $("#undoBtn"),
+  playerCountSelect = $("#playerCountSelect"),
+  modeSelect = document.getElementById("gameModeSelect"),
+  standardControls = document.getElementById("standardControls"),
+  
+  // NEW: AI Speed Element
+  aiSpeedSelect = document.getElementById("aiSpeedSelect"),
+
+  levelSelectorContainer = document.getElementById("levelSelectorContainer"),
+  levelSelect = document.getElementById("levelSelect"),
+  levelNameDisplay = document.getElementById("levelNameDisplay"),
+  timerContainer = document.getElementById("timerContainer"),
+  timerDisplay = document.getElementById("timerDisplay"),
+  timeLeftSpan = document.getElementById("timeLeft"),
+  timeUnitSpan = document.getElementById("timeUnit"),
+  timerSelect = document.getElementById("timerSelect"),
+  timerLabel = document.getElementById("timerLabel"),
+  playerSettingsContainer = document.getElementById("playerSettingsContainer");
+
+// MODAL ELEMENTS
+const gameModal = document.getElementById("gameModal"),
+      modalTitle = document.getElementById("modalTitle"),
+      modalBody = document.getElementById("modalBody"),
+      modalReplayBtn = document.getElementById("modalReplayBtn"),
+      modalNextBtn = document.getElementById("modalNextBtn");
+
+// AI Delay Variable
+let aiMoveDelay = 1000; 
+
+let rows = 9, cols = 9;
+let players = [];
+let playerTypes = [];
+let current = 0, board = [], playing = true, firstMove = [], history = [];
+let scores = [], movesMade = 0;
+let mode = "normal", timer = null, timeLimit = 120, timeLeft = timeLimit;
+let aiTimeout = null;
+
+// SAGA/BLISS STATE
+let currentLevelIndex = 0;
+let levelMaxMoves = null;     
+let playerMovesRemaining = 0; 
+let eliminationOrder = [];
+
+function init() {
+  newBtn.addEventListener("click", resetGame);
+  undoBtn.addEventListener("click", undoMove);
+  
+  playerCountSelect.addEventListener("change", () => {
+      if (mode === 'normal' || mode === 'timeAttack') {
+          setupPlayers(parseInt(playerCountSelect.value, 10));
+      }
+  });
+
+  // NEW: Listener for AI Speed
+  aiSpeedSelect.addEventListener("change", () => {
+      aiMoveDelay = parseInt(aiSpeedSelect.value, 10);
+  });
+
+  gridSelect.addEventListener("change", resetGame);
+  modeSelect.addEventListener("change", handleModeChange);
+  timerSelect.addEventListener("change", handleTimerChange);
+  
+  levelSelect.addEventListener("change", (e) => {
+      currentLevelIndex = parseInt(e.target.value, 10);
+      resetGame();
+  });
+
+  // MODAL LISTENERS
+  modalReplayBtn.addEventListener("click", () => {
+      closeModal();
+      resetGame();
+  });
+  
+  modalNextBtn.addEventListener("click", () => {
+      closeModal();
+      const list = getActiveLevelList();
+      if (currentLevelIndex < list.length - 1) {
+          currentLevelIndex++;
+          levelSelect.value = currentLevelIndex;
+          resetGame();
+      } else {
+          alert("You have completed all levels! Resetting to start.");
+          currentLevelIndex = 0;
+          levelSelect.value = 0;
+          resetGame();
+      }
+  });
+
+  // Initialize delay value
+  if(aiSpeedSelect) aiMoveDelay = parseInt(aiSpeedSelect.value, 10);
+
+  handleModeChange();
+}
+
+function closeModal() {
+    gameModal.style.display = "none";
+}
+
+function showGameOver(title, message, isWin) {
+    modalTitle.textContent = title;
+    modalTitle.style.color = isWin ? "var(--primary)" : "#ff4757"; 
+    modalBody.innerHTML = message; 
+    
+    const list = getActiveLevelList();
+    const isCampaign = (mode === 'saga' || mode === 'bliss');
+    const hasNext = isCampaign && (currentLevelIndex < list.length - 1);
+
+    if (isWin && hasNext) {
+        modalNextBtn.style.display = "inline-block";
+        modalReplayBtn.textContent = "Replay Level";
+    } else {
+        modalNextBtn.style.display = "none";
+        modalReplayBtn.textContent = "Play Again";
+    }
+
+    gameModal.style.display = "flex";
+}
+
+function getActiveLevelList() {
+    if (mode === 'saga') return SAGA_LEVELS;
+    if (mode === 'bliss') return BLISS_LEVELS;
+    return [];
+}
+
+function populateLevelSelect() {
+    const list = getActiveLevelList();
+    levelSelect.innerHTML = "";
+    list.forEach((level, index) => {
+        const option = document.createElement("option");
+        option.value = index;
+        option.textContent = `${level.id}: ${level.name}`;
+        levelSelect.appendChild(option);
+    });
+    currentLevelIndex = 0;
+}
+
+function setupPlayers(count) {
+    const isCustomMode = (mode === 'saga' || mode === 'bliss');
+    const actualCount = isCustomMode ? 2 : count;
+
+    buildPlayerSettings(
+        actualCount,
+        players, 
+        playerTypes, 
+        resetGame, 
+        (triggerAI) => { 
+            updateStatus(); 
+            renderScores(); 
+            if (triggerAI) processTurn();
+            else paintAll();
+        },
+        current
+    );
+}
+
+function handleModeChange() {
+    mode = modeSelect.value;
+    const isTimeAttack = mode === "timeAttack";
+    const isCustomMode = (mode === 'saga' || mode === 'bliss');
+
+    timerContainer.style.display = "none"; 
+    
+    if (isTimeAttack) {
+        timerContainer.style.display = "inline-block";
+        timerSelect.style.display = "inline-block";
+        timerLabel.textContent = "Timer:";
+        timeUnitSpan.textContent = "s";
+    }
+
+    if (isCustomMode) {
+        standardControls.style.display = 'none';
+        playerSettingsContainer.style.display = 'none'; 
+        levelSelectorContainer.style.display = 'block';
+        populateLevelSelect(); 
+        setupPlayers(2);
+    } else {
+        standardControls.style.display = 'inline';
+        playerSettingsContainer.style.display = 'flex';
+        levelSelectorContainer.style.display = 'none';
+        setupPlayers(parseInt(playerCountSelect.value, 10));
+    }
+    resetGame();
+}
+
+function handleTimerChange() {
+    if (mode === "timeAttack") resetGame();
+}
+
+function resetGame() {
+  closeModal(); 
+
+  let initialCols, initialRows;
+  let blockedCoords = [];
+  let startSetup = [];
+  let aiSetting = null;
+
+  levelMaxMoves = null;
+  playerMovesRemaining = 0;
+  eliminationOrder = [];
+
+  if (mode === 'saga' || mode === 'bliss') {
+      const list = getActiveLevelList();
+      if (!list[currentLevelIndex]) currentLevelIndex = 0;
+      const level = list[currentLevelIndex];
+      
+      initialCols = level.cols;
+      initialRows = level.rows;
+      blockedCoords = level.blocked || [];
+      startSetup = level.setup || [];
+      aiSetting = level.aiDifficulty;
+      
+      levelMaxMoves = level.maxMoves || null;
+      levelNameDisplay.textContent = level.name;
+      
+      if (levelMaxMoves !== null) {
+          playerMovesRemaining = levelMaxMoves;
+          timerContainer.style.display = "inline-block";
+          timerSelect.style.display = "none";
+          timerLabel.textContent = "Moves Left:";
+          timeLeftSpan.textContent = playerMovesRemaining;
+          timeUnitSpan.textContent = "";
+      } else {
+          timerContainer.style.display = "none";
+      }
+
+  } else {
+      const [c, r] = gridSelect.value.split("x").map(Number);
+      initialCols = c;
+      initialRows = r;
+      if (mode === 'timeAttack') {
+          timerContainer.style.display = "inline-block";
+          timerSelect.style.display = "inline-block";
+          timerLabel.textContent = "Time:";
+          timeUnitSpan.textContent = "s";
+      }
+  }
+
+  cols = initialCols;
+  rows = initialRows;
+  current = 0; playing = true;
+  firstMove = players.map(() => false);
+  history = [];
+  movesMade = 0;
+  
+  board = Array.from({ length: rows }, (_, y) =>
+    Array.from({ length: cols }, (_, x) => ({ 
+        owner: -1, 
+        count: 0,
+        isBlocked: false 
+    }))
+  );
+  
+  for (const [x, y] of blockedCoords) {
+      if (y < rows && x < cols) board[y][x].isBlocked = true;
+  }
+
+  for (const setup of startSetup) {
+      if (board[setup.y] && board[setup.y][setup.x] && !board[setup.y][setup.x].isBlocked) {
+          board[setup.y][setup.x].owner = setup.owner;
+          board[setup.y][setup.x].count = setup.count;
+      }
+  }
+  
+  boardEl.style.gridTemplateColumns = `repeat(${cols}, var(--cell))`;
+  boardEl.innerHTML = "";
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+      const cell = document.createElement("button");
+      cell.className = "cell";
+      cell.setAttribute("data-x", x);
+      cell.setAttribute("data-y", y);
+      cell.setAttribute("aria-label", `Cell ${x + 1},${y + 1}`);
+      cell.addEventListener("click", () => handleMove(x, y));
+      boardEl.appendChild(cell);
+    }
+  }
+
+  if (mode === 'saga' || mode === 'bliss') {
+      if (players.length < 2) setupPlayers(2);
+      playerTypes[0] = { type: 'human', difficulty: null };
+      playerTypes[1] = { type: 'ai', difficulty: aiSetting || 'easy' };
+      players[0].name = "You";
+      players[1].name = (mode === 'bliss') ? "Puzzle AI" : "Enemy General";
+  }
+
+  updateStatus((mode === 'saga' || mode === 'bliss') ? "Your Turn" : `Player ${current + 1}'s turn`);
+  updateScores();
+  
+  if (mode === "timeAttack") { timeLimit = parseInt(timerSelect.value, 10); startTimer(); }
+  else { stopTimer(); }
+  
+  paintAll();
+  processTurn();
+}
+
+function startTimer() {
+  stopTimer();
+  timeLeft = timeLimit;
+  timeLeftSpan.textContent = timeLeft;
+  timer = setInterval(() => {
+    timeLeft--; timeLeftSpan.textContent = timeLeft;
+    if (timeLeft <= 0) { clearInterval(timer); endGameDueToTime(); }
+  }, 1000);
+}
+
+function stopTimer() { if (timer) { clearInterval(timer); timer = null; } }
+
+function endGameDueToTime() { 
+    playing = false; 
+    showGameOver("Time's Up!", "You ran out of time!", false);
+}
+
+function advanceTurn() {
+  let loopCount = 0;
+  do {
+      current = (current + 1) % players.length;
+      loopCount++;
+      if (loopCount > players.length) break; 
+      
+  } while (
+      firstMove[current] && scores[current] === 0
+  );
+
+  updateStatus(); 
+  paintAll(true); // Triggers Background Pulse
+  
+  if ((mode === 'saga' || mode === 'bliss') && levelMaxMoves !== null && current === 0) {
+      if (playerMovesRemaining <= 0) {
+          playing = false;
+          showGameOver("Out of Moves!", "You failed to complete the objective in time.", false);
+          return; 
+      }
+  }
+
+  if (playing) processTurn();
+}
+
+function processTurn() {
+  if (!playing) return;
+  const p = playerTypes[current];
+  if (!p || p.type !== "ai") return;
+  
+  clearTimeout(aiTimeout);
+  
+  aiTimeout = setTimeout(() => {
+    let move;
+    if (mode === 'saga' || mode === 'bliss') {
+        move = makeSagaAIMove(board, current, p.difficulty, rows, cols, players.length);
+    } else {
+        move = makeAIMove(board, current, p.difficulty, rows, cols, players.length);
+    }
+
+    if (move) makeMove(move.x, move.y);
+    else advanceTurn();
+  }, aiMoveDelay);
+}
+
+function handleMove(x, y) {
+  if (!playing) return;
+  if (playerTypes[current].type === "ai") return;
+  const cell = board[y][x];
+  
+  if (cell.isBlocked) return;
+  if (cell.owner !== -1 && cell.owner !== current) return;
+  
+  playSound("click");
+  makeMove(x, y);
+}
+
+async function makeMove(x, y) {
+  history.push(JSON.stringify({ 
+      board: board.map(row => row.map(c => ({...c}))),
+      current, playing, firstMove: [...firstMove], scores: [...scores], movesMade,
+      playerMovesRemaining, eliminationOrder: [...eliminationOrder]
+  }));
+  
+  const cell = board[y][x];
+  cell.owner = current; cell.count += 1;
+  movesMade++;
+
+  if ((mode === 'saga' || mode === 'bliss') && levelMaxMoves !== null && current === 0) {
+      playerMovesRemaining--;
+      if(timeLeftSpan) timeLeftSpan.textContent = playerMovesRemaining; 
+  }
+  
+  drawCell(x, y, board, boardEl, cols, players, current);
+  await resolveReactions();
+  
+  firstMove[current] = true;
+  updateScores();
+  
+  const won = checkWin();
+  if (playing && !won) advanceTurn();
+}
+
+async function resolveReactions() {
+  const q = [];
+  for (let y = 0; y < rows; y++) {
+    for (let x = 0; x < cols; x++) {
+        if (board[y][x].isBlocked) continue; 
+        if (board[y][x].count >= capacity(x, y, rows, cols)) q.push([x, y]);
+    }
+  }
+
+  if (!q.length) return;
+
+  const sleep = ms => new Promise(r => setTimeout(r, ms));
+  let loopCount = 0;
+  const MAX_LOOPS = 400;
+
+  while (q.length) {
+    loopCount++;
+    if (loopCount > MAX_LOOPS) break;
+
+    const wave = [...new Set(q.map(([x, y]) => `${x},${y}`))].map(s => s.split(",").map(Number));
+    q.length = 0;
+    const toInc = [];
+
+    // --- NEW: EFFECTS TRIGGERS ---
+    if (loopCount > 3) triggerShake(); // Shake on decent chains
+    if (loopCount > 8) triggerFlash(players[current].color); // Flash on huge chains
+    // -----------------------------
+
+    for (const [x, y] of wave) {
+      const cap = capacity(x, y, rows, cols);
+      const cell = board[y][x];
+      if (cell.count < cap) continue;
+      
+      cell.count -= cap;
+      if (cell.count === 0) cell.owner = -1;
+
+      if (loopCount < 20) playSound("explode");
+
+      // --- NEW: SPAWN PARTICLES ---
+      // We need screen coordinates for the particles
+      const cellIndex = y * cols + x;
+      const cellElement = boardEl.children[cellIndex];
+      if (cellElement) {
+          const rect = cellElement.getBoundingClientRect();
+          const centerX = rect.left + rect.width / 2;
+          const centerY = rect.top + rect.height / 2;
+          spawnParticles(centerX, centerY, players[current].color);
+      }
+      // ----------------------------
+
+      for (const [nx, ny] of neighbors(x, y, rows, cols, board)) { 
+        const nc = board[ny][nx];
+        nc.owner = current;
+        nc.count += 1;
+        if (nc.count >= capacity(nx, ny, rows, cols)) toInc.push([nx, ny]);
+      }
+    }
+
+    paintAll();
+    for (const p of toInc) q.push(p);
+
+    let delay = 120;
+    if (loopCount > 10) delay = 60;
+    if (loopCount > 30) delay = 10; 
+    if (loopCount > 60) delay = 5;
+
+    await sleep(delay);
+  }
+}
+
+function paintAll(isTurnChange = false) {
+    if (isTurnChange && players[current]) {
+        const color = players[current].color;
+        document.documentElement.style.setProperty("--glow", color);
+        // NEW: Background Pulse
+        setBackgroundPulse(color);
+    }
+    for (let y = 0; y < rows; y++) {
+        for (let x = 0; x < cols; x++) {
+            drawCell(x, y, board, boardEl, cols, players, current, isTurnChange);
+        }
+    }
+}
+
+function updateScores() {
+  scores = players.map(() => 0);
+  for (let y = 0; y < rows; y++)
+    for (let x = 0; x < cols; x++) {
+      if (board[y][x].isBlocked) continue; 
+      const o = board[y][x].owner;
+      if (o !== -1) scores[o] += board[y][x].count;
+    }
+  renderScores();
+}
+
+function renderScores() {
+  scoreDisplay.innerHTML = players
+    .map((p, i) => {
+      const isEliminated = eliminationOrder.includes(i);
+      const opacity = isEliminated ? "0.4" : "1";
+      const decoration = isEliminated ? "line-through" : "none";
+      return `<span style="color:${p.color}; opacity:${opacity}; text-decoration:${decoration}; font-weight:700; margin-right:12px;">
+         ${p.name || 'Player ' + (i+1)}: ${scores[i]}
+      </span>`;
+    })
+    .join("");
+}
+
+function updateStatus(extra) {
+  const p = players[current];
+  if (!p) return;
+  statusText.textContent = extra || `${p.name}'s turn`;
+  turnBadge.style.background = p.color;
+}
+
+function undoMove() {
+  if (!history.length) return;
+  clearTimeout(aiTimeout);
+  const prev = JSON.parse(history.pop());
+  board = prev.board; current = prev.current; playing = prev.playing;
+  firstMove = prev.firstMove; scores = prev.scores || scores; movesMade = prev.movesMade || movesMade;
+  
+  playerMovesRemaining = prev.playerMovesRemaining !== undefined ? prev.playerMovesRemaining : playerMovesRemaining;
+  eliminationOrder = prev.eliminationOrder || []; 
+
+  if(levelMaxMoves !== null) {
+      if(timeLeftSpan) timeLeftSpan.textContent = playerMovesRemaining;
+  }
+  
+  closeModal(); 
+  paintAll(true); updateStatus(); renderScores();
+}
+
+function launchConfetti(color) {
+    const confettiCount = 60;
+    for (let i = 0; i < confettiCount; i++) {
+      const piece = document.createElement("div");
+      piece.className = "confetti";
+      piece.style.setProperty("--color", color);
+      piece.style.left = Math.random() * 100 + "vw";
+      piece.style.animationDelay = (Math.random() * 2) + "s";
+      piece.style.opacity = Math.random().toString();
+      document.body.appendChild(piece);
+      setTimeout(() => piece.remove(), 3000);
+    }
+}
+
+function checkWin() {
+  if (mode === 'saga' || mode === 'bliss') {
+      const counts = players.map(() => 0);
+      for (let y=0;y<rows;y++) for (let x=0;x<cols;x++){
+        if (board[y][x].isBlocked) continue;
+        const o = board[y][x].owner; if (o !== -1) counts[o] += board[y][x].count;
+      }
+      const alive = counts.map((c,i)=>({count:c,idx:i})).filter(p=>p.count>0);
+      if (alive.length === 1) {
+          if (alive[0].idx === 0) {
+            playing = false;
+            showGameOver("Level Complete!", "Excellent strategy! You defeated the AI.", true);
+            playSound("win");
+            launchConfetti(players[0].color);
+            return true;
+          } else {
+             playing = false;
+             showGameOver("Level Failed", "The AI has conquered the board.", false);
+             return true;
+          }
+      }
+      return false;
+  }
+
+  const minRounds = 3;
+  const minMovesForWin = players.length * minRounds;
+  if (movesMade < minMovesForWin) return false;
+  
+  const counts = players.map(() => 0);
+  for (let y=0;y<rows;y++) for (let x=0;x<cols;x++){
+    if (board[y][x].isBlocked) continue;
+    const o = board[y][x].owner; if (o !== -1) counts[o] += board[y][x].count;
+  }
+  
+  for(let i=0; i<players.length; i++) {
+      if (firstMove[i] && counts[i] === 0 && !eliminationOrder.includes(i)) {
+          eliminationOrder.push(i);
+      }
+  }
+
+  const alive = counts.map((c,i)=>({count:c,idx:i})).filter(p=>p.count>0);
+  
+  if (alive.length === 1) {
+      playing = false;
+      const w = alive[0].idx;
+      const winnerName = players[w].name?.trim() || `Player ${w+1}`;
+      
+      let rankText = `🏆 <b>${winnerName} Wins!</b><br><br>`;
+      
+      if (players.length > 2) {
+          if (eliminationOrder.length > 0) {
+              const secondIdx = eliminationOrder[eliminationOrder.length - 1];
+              const secondName = players[secondIdx].name || `P${secondIdx+1}`;
+              rankText += `🥈 2nd: ${secondName}<br>`;
+          }
+          if (players.length >= 6 && eliminationOrder.length > 1) {
+              const thirdIdx = eliminationOrder[eliminationOrder.length - 2];
+              const thirdName = players[thirdIdx].name || `P${thirdIdx+1}`;
+              rankText += `🥉 3rd: ${thirdName}`;
+          }
+      } else {
+          rankText += "Great Match!";
+      }
+      
+      showGameOver("Game Over", rankText, true);
+      playSound("win");
+      launchConfetti(players[w].color);
+      return true;
+  }
+  return false;
+}
+
+init();

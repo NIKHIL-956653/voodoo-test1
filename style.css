@@ -1,0 +1,204 @@
+/* --- BASE STYLES (From your uploaded file) --- */
+:root { --cell: 62px; --gap: 6px; --glow: #ff4757; --primary: #47f2ff; }
+
+* { box-sizing: border-box; }
+html, body {
+  min-height: 100%;
+  margin: 0;
+  background: #000;
+  color: #eaf2ff;
+  font: 500 16px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Arial;
+  display: grid;
+  place-items: start center;
+  overflow-y: auto; 
+  overflow-x: hidden; 
+}
+
+h1 { margin: 18px 0 6px; color: #47f2ff; text-shadow: 0 0 18px #17cfe8; }
+.wrap { width: min(1000px, 96vw); padding: 8px 10px 28px; }
+
+.toolbar {
+  display: flex; gap: 10px; align-items: center;
+  margin: 8px 0 10px; flex-wrap: wrap;
+}
+
+label { color: #a9bfd6; display: flex; gap: 6px; align-items: center; font-size: 0.96em; }
+
+select, .btn, input[type="color"] {
+  background: #101318; color: #eaf2ff; border: 1px solid #ffffff24;
+  border-radius: 10px; padding: 8px 10px; cursor: pointer;
+}
+.btn:hover { background: #161b24; }
+
+.player-settings-container { margin: 10px 0; display: flex; gap: 16px; flex-wrap: wrap; }
+.player-setting {
+  background: #151515; padding: 8px 12px; border-radius: 12px;
+  border: 1px solid #ffffff22; display: flex; gap: 10px; align-items: center;
+  flex-wrap: wrap; color: #eaf2ff; font-size: 0.96em;
+}
+.player-setting label { color: #a9bfd6; font-weight: 600; font-size: 1em; min-width: 110px; }
+.player-setting input[type="text"] {
+  background: #101318; border: 1px solid #ffffff24; border-radius: 8px;
+  padding: 7px 13px; color: #eaf2ff; font-weight: 600; font-size: 1em;
+  transition: border 0.2s, box-shadow 0.2s; outline: none; min-width: 94px; max-width: 140px;
+}
+.player-setting input[type="text"]:focus { border: 1.5px solid #47f2ff; box-shadow: 0 0 8px #47f2ff22; }
+.player-setting input[type="text"]::placeholder { color: #97afd6; font-weight: 500; letter-spacing: 0.2px; }
+
+.status { display: flex; gap: 10px; align-items: center; margin: 8px 0 14px; }
+.badge { width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 12px var(--glow); }
+
+.board {
+  display: grid; grid-auto-rows: var(--cell); gap: var(--gap); padding: var(--gap);
+  border-radius: 18px; background: #0b0b0b; border: 1px solid #ffffff18;
+  box-shadow: 0 0 22px var(--glow); animation: boardPulse 1.6s ease-in-out infinite;
+  margin: 0 auto;
+}
+
+@keyframes boardPulse { 0%,100%{box-shadow:0 0 16px var(--glow);} 50%{box-shadow:0 0 34px var(--glow);} }
+
+.cell {
+  position: relative; width: var(--cell); height: var(--cell); border-radius: 14px;
+  background: #151515; border: 2px solid #ffffff22; display: grid; place-items: center;
+  cursor: pointer; transition: border-color .25s ease, box-shadow .25s ease;
+}
+.cell.owned { border-color: #ffffff44; }
+.cell.pulse { box-shadow: 0 0 10px var(--glow) inset; animation: cellPulse 1.2s ease-in-out infinite; }
+@keyframes cellPulse { 0%,100%{box-shadow:0 0 8px var(--glow) inset;} 50%{box-shadow:0 0 18px var(--glow) inset;} }
+
+/* ORBS */
+.orb { width: 68%; height: 68%; border-radius: 999px; position: relative; filter: drop-shadow(0 3px 8px #000a); }
+.orb::after { content:""; position:absolute; inset:0; border-radius:999px; box-shadow:0 0 16px currentColor; }
+.orb.one { background: currentColor; }
+
+.pair-improved { width:100%; height:100%; display:flex; justify-content:center; align-items:center; gap:6px; }
+.orb.two-orb { width:42%; height:42%; border-radius:999px; filter:drop-shadow(0 3px 8px #000a); position:relative; animation:float-orb 2.5s ease-in-out infinite; }
+.pair-improved .orb.two-orb:nth-child(2) { animation-delay: 1.25s; }
+@keyframes float-orb { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
+
+/* --- REQUIRED ADDITIONS FOR NEW FEATURES --- */
+
+/* 1. Bomb Shake Animation (Added to your existing SVG class) */
+.bombsvg { 
+  width: 120%; 
+  height: 120%; 
+  display: block; 
+  margin: 0 auto; 
+  position: relative; 
+  filter: drop-shadow(0 0 18px currentColor);
+  animation: jitter 0.1s infinite; /* THE SHAKE EFFECT */
+}
+
+@keyframes jitter { 
+  0% { transform: translate(0,0); } 
+  25% { transform: translate(1px,1px); } 
+  50% { transform: translate(-1px,-1px); } 
+  75% { transform: translate(-1px,1px); } 
+}
+
+/* 2. Blocked Cells (For Saga/Bliss Mode) */
+.cell.blocked {
+    background: repeating-linear-gradient(
+        45deg,
+        #151515,
+        #151515 10px,
+        #222 10px,
+        #222 20px
+    );
+    cursor: default;
+    border-color: #333;
+    opacity: 0.5;
+    pointer-events: none;
+    box-shadow: none;
+    animation: none;
+}
+
+/* 3. Confetti */
+.confetti {
+  position: fixed; width: 10px; height: 10px; background-color: var(--color);
+  top: -10px; z-index: 9999; pointer-events: none;
+  animation: fall 3s linear forwards;
+}
+@keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
+
+/* 4. Game Over Modal (Essential for UI) */
+.modal-overlay {
+  position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
+  background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px);
+  display: flex; justify-content: center; align-items: center;
+  z-index: 2000; animation: fadeIn 0.3s ease;
+}
+.modal-content {
+  background: #0a0a0a; border: 2px solid var(--primary);
+  box-shadow: 0 0 30px var(--primary), inset 0 0 20px rgba(71, 242, 255, 0.1);
+  padding: 40px; border-radius: 16px; text-align: center;
+  max-width: 450px; width: 90%; color: #fff;
+  transform: scale(0.9); animation: popIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards;
+}
+.modal-title { font-size: 2.5rem; margin: 0 0 10px 0; text-shadow: 0 0 10px currentColor; font-weight: 800; }
+.modal-body { font-size: 1.1rem; margin-bottom: 30px; color: #ccc; white-space: pre-line; line-height: 1.6; }
+.modal-actions { display: flex; gap: 15px; justify-content: center; }
+.modal-btn { padding: 12px 24px; font-size: 1rem; font-weight: bold; cursor: pointer; border: none; border-radius: 8px; transition: transform 0.2s, filter 0.2s; }
+.modal-btn.primary { background: var(--primary); color: #000; box-shadow: 0 0 15px var(--primary); }
+.modal-btn.secondary { background: #333; color: #fff; border: 1px solid #555; }
+.modal-btn:hover { transform: scale(1.05); filter: brightness(1.2); }
+
+@keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+@keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* Responsive */
+@media (max-width: 800px) {
+  .player-setting { font-size: 0.95em; min-width: 140px; max-width: 99vw; }
+  .player-setting label { min-width: 70px; font-size: 0.98em; }
+  .player-setting input[type="text"] { min-width: 72px; max-width: 94px; font-size: 0.93em; padding: 6px 7px; }
+}
+@media (max-width: 640px) { :root { --cell: 54px; --gap: 5px; } .player-setting { font-size: 0.93em; } }
+@media (max-width: 420px) { :root { --cell: 46px; --gap: 4px; } .player-setting { font-size: 0.9em; } .player-setting input[type="text"]{font-size:0.85em;} }
+
+.cell:focus { outline: 2px solid #47f2ff; z-index: 2; }
+
+/* --- 2. SCREEN EFFECTS & JUICE --- */
+
+/* Screen Shake Animation */
+@keyframes shake-hard {
+  0% { transform: translate(1px, 1px) rotate(0deg); }
+  10% { transform: translate(-1px, -2px) rotate(-1deg); }
+  20% { transform: translate(-3px, 0px) rotate(1deg); }
+  30% { transform: translate(3px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 2px) rotate(-1deg); }
+  60% { transform: translate(-3px, 1px) rotate(0deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+
+.shake-active {
+  animation: shake-hard 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+/* Flash Tint Overlay */
+#flash-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  pointer-events: none;
+  z-index: 9000;
+  opacity: 0;
+  transition: opacity 0.1s ease-out;
+  mix-blend-mode: screen; /* Makes the colors pop */
+}
+
+/* Spark Particles */
+.spark {
+  position: absolute;
+  width: 6px;
+  height: 6px;
+  background: var(--color);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 8000;
+  box-shadow: 0 0 10px var(--color);
+}
+
+/* Background Pulse (Synced to Player) */
+body {
+  transition: background-color 0.5s ease;
+}

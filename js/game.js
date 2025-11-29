@@ -1,10 +1,9 @@
-import { playSound } from "./sound.js";
+import { playSound, toggleMute } from "./sound.js"; // Imported toggleMute
 import { capacity, neighbors, drawCell } from "./board.js";
 import { buildPlayerSettings } from "./player.js";
 import { SAGA_LEVELS, BLISS_LEVELS } from "./levels.js"; 
 import { makeAIMove } from "./ai.js";       
 import { makeSagaAIMove } from "./ai2.js"; 
-// NEW: Import the Visual Effects
 import { spawnParticles, triggerShake, triggerFlash, setBackgroundPulse } from "./fx.js"; 
 
 const $ = s => document.querySelector(s);
@@ -15,13 +14,12 @@ const boardEl = $("#board"),
   gridSelect = $("#gridSelect"),
   newBtn = $("#newGameBtn"),
   undoBtn = $("#undoBtn"),
+  // NEW: Sound Button
+  soundBtn = $("#soundBtn"), 
   playerCountSelect = $("#playerCountSelect"),
   modeSelect = document.getElementById("gameModeSelect"),
   standardControls = document.getElementById("standardControls"),
-  
-  // NEW: AI Speed Element
   aiSpeedSelect = document.getElementById("aiSpeedSelect"),
-
   levelSelectorContainer = document.getElementById("levelSelectorContainer"),
   levelSelect = document.getElementById("levelSelect"),
   levelNameDisplay = document.getElementById("levelNameDisplay"),
@@ -40,9 +38,7 @@ const gameModal = document.getElementById("gameModal"),
       modalReplayBtn = document.getElementById("modalReplayBtn"),
       modalNextBtn = document.getElementById("modalNextBtn");
 
-// AI Delay Variable
 let aiMoveDelay = 1000; 
-
 let rows = 9, cols = 9;
 let players = [];
 let playerTypes = [];
@@ -61,13 +57,20 @@ function init() {
   newBtn.addEventListener("click", resetGame);
   undoBtn.addEventListener("click", undoMove);
   
+  // NEW: Sound Button Listener
+  if(soundBtn) {
+      soundBtn.addEventListener("click", () => {
+          const muted = toggleMute();
+          soundBtn.textContent = muted ? "🔇" : "🔊";
+      });
+  }
+
   playerCountSelect.addEventListener("change", () => {
       if (mode === 'normal' || mode === 'timeAttack') {
           setupPlayers(parseInt(playerCountSelect.value, 10));
       }
   });
 
-  // NEW: Listener for AI Speed
   aiSpeedSelect.addEventListener("change", () => {
       aiMoveDelay = parseInt(aiSpeedSelect.value, 10);
   });
@@ -81,7 +84,6 @@ function init() {
       resetGame();
   });
 
-  // MODAL LISTENERS
   modalReplayBtn.addEventListener("click", () => {
       closeModal();
       resetGame();
@@ -102,7 +104,6 @@ function init() {
       }
   });
 
-  // Initialize delay value
   if(aiSpeedSelect) aiMoveDelay = parseInt(aiSpeedSelect.value, 10);
 
   handleModeChange();
@@ -338,7 +339,7 @@ function advanceTurn() {
   );
 
   updateStatus(); 
-  paintAll(true); // Triggers Background Pulse
+  paintAll(true);
   
   if ((mode === 'saga' || mode === 'bliss') && levelMaxMoves !== null && current === 0) {
       if (playerMovesRemaining <= 0) {
@@ -432,10 +433,8 @@ async function resolveReactions() {
     q.length = 0;
     const toInc = [];
 
-    // --- NEW: EFFECTS TRIGGERS ---
-    if (loopCount > 3) triggerShake(); // Shake on decent chains
-    if (loopCount > 8) triggerFlash(players[current].color); // Flash on huge chains
-    // -----------------------------
+    if (loopCount > 3) triggerShake(); 
+    if (loopCount > 8) triggerFlash(players[current].color); 
 
     for (const [x, y] of wave) {
       const cap = capacity(x, y, rows, cols);
@@ -447,8 +446,6 @@ async function resolveReactions() {
 
       if (loopCount < 20) playSound("explode");
 
-      // --- NEW: SPAWN PARTICLES ---
-      // We need screen coordinates for the particles
       const cellIndex = y * cols + x;
       const cellElement = boardEl.children[cellIndex];
       if (cellElement) {
@@ -457,7 +454,6 @@ async function resolveReactions() {
           const centerY = rect.top + rect.height / 2;
           spawnParticles(centerX, centerY, players[current].color);
       }
-      // ----------------------------
 
       for (const [nx, ny] of neighbors(x, y, rows, cols, board)) { 
         const nc = board[ny][nx];
@@ -483,7 +479,6 @@ function paintAll(isTurnChange = false) {
     if (isTurnChange && players[current]) {
         const color = players[current].color;
         document.documentElement.style.setProperty("--glow", color);
-        // NEW: Background Pulse
         setBackgroundPulse(color);
     }
     for (let y = 0; y < rows; y++) {

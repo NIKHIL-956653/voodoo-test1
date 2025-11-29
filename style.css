@@ -1,4 +1,4 @@
-/* --- BASE STYLES (From your uploaded file) --- */
+/* --- BASE STYLES --- */
 :root { --cell: 62px; --gap: 6px; --glow: #ff4757; --primary: #47f2ff; }
 
 * { box-sizing: border-box; }
@@ -12,11 +12,13 @@ html, body {
   place-items: start center;
   overflow-y: auto; 
   overflow-x: hidden; 
+  transition: background-color 0.5s ease;
 }
 
 h1 { margin: 18px 0 6px; color: #47f2ff; text-shadow: 0 0 18px #17cfe8; }
 .wrap { width: min(1000px, 96vw); padding: 8px 10px 28px; }
 
+/* --- TOOLBAR --- */
 .toolbar {
   display: flex; gap: 10px; align-items: center;
   margin: 8px 0 10px; flex-wrap: wrap;
@@ -48,11 +50,15 @@ select, .btn, input[type="color"] {
 .status { display: flex; gap: 10px; align-items: center; margin: 8px 0 14px; }
 .badge { width: 18px; height: 18px; border-radius: 999px; box-shadow: 0 0 12px var(--glow); }
 
+/* --- THE BOARD (With the Magic Mobile Fix) --- */
 .board {
   display: grid; grid-auto-rows: var(--cell); gap: var(--gap); padding: var(--gap);
   border-radius: 18px; background: #0b0b0b; border: 1px solid #ffffff18;
   box-shadow: 0 0 22px var(--glow); animation: boardPulse 1.6s ease-in-out infinite;
   margin: 0 auto;
+  
+  /* THIS IS THE MAGIC LINE YOU WANTED: */
+  touch-action: none; 
 }
 
 @keyframes boardPulse { 0%,100%{box-shadow:0 0 16px var(--glow);} 50%{box-shadow:0 0 34px var(--glow);} }
@@ -66,7 +72,7 @@ select, .btn, input[type="color"] {
 .cell.pulse { box-shadow: 0 0 10px var(--glow) inset; animation: cellPulse 1.2s ease-in-out infinite; }
 @keyframes cellPulse { 0%,100%{box-shadow:0 0 8px var(--glow) inset;} 50%{box-shadow:0 0 18px var(--glow) inset;} }
 
-/* ORBS */
+/* --- ORBS & BOMBS --- */
 .orb { width: 68%; height: 68%; border-radius: 999px; position: relative; filter: drop-shadow(0 3px 8px #000a); }
 .orb::after { content:""; position:absolute; inset:0; border-radius:999px; box-shadow:0 0 16px currentColor; }
 .orb.one { background: currentColor; }
@@ -76,9 +82,7 @@ select, .btn, input[type="color"] {
 .pair-improved .orb.two-orb:nth-child(2) { animation-delay: 1.25s; }
 @keyframes float-orb { 0%,100%{transform:translateY(0);} 50%{transform:translateY(-4px);} }
 
-/* --- REQUIRED ADDITIONS FOR NEW FEATURES --- */
-
-/* 1. Bomb Shake Animation (Added to your existing SVG class) */
+/* Shaking Bomb Animation */
 .bombsvg { 
   width: 120%; 
   height: 120%; 
@@ -86,7 +90,7 @@ select, .btn, input[type="color"] {
   margin: 0 auto; 
   position: relative; 
   filter: drop-shadow(0 0 18px currentColor);
-  animation: jitter 0.1s infinite; /* THE SHAKE EFFECT */
+  animation: jitter 0.1s infinite;
 }
 
 @keyframes jitter { 
@@ -96,7 +100,9 @@ select, .btn, input[type="color"] {
   75% { transform: translate(-1px,1px); } 
 }
 
-/* 2. Blocked Cells (For Saga/Bliss Mode) */
+/* --- NEW EFFECTS (Particles, Blocked Cells) --- */
+
+/* 1. Blocked Cells */
 .cell.blocked {
     background: repeating-linear-gradient(
         45deg,
@@ -113,15 +119,46 @@ select, .btn, input[type="color"] {
     animation: none;
 }
 
-/* 3. Confetti */
-.confetti {
+/* 2. Confetti & Sparks */
+.confetti, .spark {
   position: fixed; width: 10px; height: 10px; background-color: var(--color);
   top: -10px; z-index: 9999; pointer-events: none;
   animation: fall 3s linear forwards;
 }
+.spark {
+  width: 6px; height: 6px; border-radius: 50%; 
+  box-shadow: 0 0 10px var(--color); z-index: 8000;
+  animation: none; /* JS Handles animation */
+}
 @keyframes fall { to { transform: translateY(105vh) rotate(720deg); } }
 
-/* 4. Game Over Modal (Essential for UI) */
+/* 3. Screen Shake */
+@keyframes shake-hard {
+  0% { transform: translate(1px, 1px) rotate(0deg); }
+  10% { transform: translate(-1px, -2px) rotate(-1deg); }
+  20% { transform: translate(-3px, 0px) rotate(1deg); }
+  30% { transform: translate(3px, 2px) rotate(0deg); }
+  40% { transform: translate(1px, -1px) rotate(1deg); }
+  50% { transform: translate(-1px, 2px) rotate(-1deg); }
+  60% { transform: translate(-3px, 1px) rotate(0deg); }
+  100% { transform: translate(0, 0) rotate(0deg); }
+}
+.shake-active {
+  animation: shake-hard 0.4s cubic-bezier(.36,.07,.19,.97) both;
+}
+
+/* 4. Flash Overlay */
+#flash-overlay {
+  position: fixed;
+  top: 0; left: 0; width: 100vw; height: 100vh;
+  pointer-events: none;
+  z-index: 9000;
+  opacity: 0;
+  transition: opacity 0.1s ease-out;
+  mix-blend-mode: screen; 
+}
+
+/* --- GAME OVER MODAL UI --- */
 .modal-overlay {
   position: fixed; top: 0; left: 0; width: 100vw; height: 100vh;
   background: rgba(0, 0, 0, 0.85); backdrop-filter: blur(5px);
@@ -146,7 +183,7 @@ select, .btn, input[type="color"] {
 @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 @keyframes popIn { from { transform: scale(0.8); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 
-/* Responsive */
+/* --- RESPONSIVE --- */
 @media (max-width: 800px) {
   .player-setting { font-size: 0.95em; min-width: 140px; max-width: 99vw; }
   .player-setting label { min-width: 70px; font-size: 0.98em; }
@@ -156,49 +193,3 @@ select, .btn, input[type="color"] {
 @media (max-width: 420px) { :root { --cell: 46px; --gap: 4px; } .player-setting { font-size: 0.9em; } .player-setting input[type="text"]{font-size:0.85em;} }
 
 .cell:focus { outline: 2px solid #47f2ff; z-index: 2; }
-
-/* --- 2. SCREEN EFFECTS & JUICE --- */
-
-/* Screen Shake Animation */
-@keyframes shake-hard {
-  0% { transform: translate(1px, 1px) rotate(0deg); }
-  10% { transform: translate(-1px, -2px) rotate(-1deg); }
-  20% { transform: translate(-3px, 0px) rotate(1deg); }
-  30% { transform: translate(3px, 2px) rotate(0deg); }
-  40% { transform: translate(1px, -1px) rotate(1deg); }
-  50% { transform: translate(-1px, 2px) rotate(-1deg); }
-  60% { transform: translate(-3px, 1px) rotate(0deg); }
-  100% { transform: translate(0, 0) rotate(0deg); }
-}
-
-.shake-active {
-  animation: shake-hard 0.4s cubic-bezier(.36,.07,.19,.97) both;
-}
-
-/* Flash Tint Overlay */
-#flash-overlay {
-  position: fixed;
-  top: 0; left: 0; width: 100vw; height: 100vh;
-  pointer-events: none;
-  z-index: 9000;
-  opacity: 0;
-  transition: opacity 0.1s ease-out;
-  mix-blend-mode: screen; /* Makes the colors pop */
-}
-
-/* Spark Particles */
-.spark {
-  position: absolute;
-  width: 6px;
-  height: 6px;
-  background: var(--color);
-  border-radius: 50%;
-  pointer-events: none;
-  z-index: 8000;
-  box-shadow: 0 0 10px var(--color);
-}
-
-/* Background Pulse (Synced to Player) */
-body {
-  transition: background-color 0.5s ease;
-}

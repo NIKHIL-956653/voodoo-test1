@@ -1,4 +1,4 @@
-// js/fx.js (Robust Version)
+// js/fx.js
 
 // 1. SETUP FX LAYER
 const fxLayer = document.createElement("div");
@@ -26,16 +26,16 @@ document.body.appendChild(flashOverlay);
 // -------------------------------------------------------------
 // PARTICLE POOL
 // -------------------------------------------------------------
+const MAX_PARTICLES = 80;
 const particlePool = [];
 
 function getParticle() {
     if (particlePool.length > 0) return particlePool.pop();
     const p = document.createElement("div");
-    // FORCE STYLES IN JS (So we don't depend on style.css)
+    // Self-contained styles so they work even if CSS is missing
     Object.assign(p.style, {
         position: "absolute",
-        width: "8px",
-        height: "8px",
+        width: "8px", height: "8px",
         borderRadius: "50%",
         pointerEvents: "none"
     });
@@ -44,7 +44,9 @@ function getParticle() {
 
 function releaseParticle(p) {
     p.remove();
-    particlePool.push(p);
+    if (particlePool.length < MAX_PARTICLES) {
+        particlePool.push(p);
+    }
 }
 
 // -------------------------------------------------------------
@@ -57,20 +59,19 @@ export function spawnParticles(x, y, color) {
         const p = getParticle();
         fxLayer.appendChild(p);
         
-        // Apply color and position
         p.style.backgroundColor = color;
         p.style.boxShadow = `0 0 10px ${color}`;
         p.style.left = x + "px";
         p.style.top = y + "px";
+        p.style.transform = "scale(1)";
+        p.style.opacity = "1";
         
-        // Random physics
         const angle = Math.random() * Math.PI * 2;
         const velocity = 30 + Math.random() * 50; 
         const tx = Math.cos(angle) * velocity;
         const ty = Math.sin(angle) * velocity;
         const duration = 400 + Math.random() * 200;
 
-        // Animate
         const anim = p.animate([
             { transform: 'translate(0, 0) scale(1)', opacity: 1 },
             { transform: `translate(${tx}px, ${ty}px) scale(0)`, opacity: 0 }
@@ -87,7 +88,7 @@ export function triggerShake() {
     const board = document.querySelector('.board');
     if (!board) return;
     board.classList.remove('shake-active');
-    void board.offsetWidth; // Force reflow
+    void board.offsetWidth; 
     board.classList.add('shake-active');
     setTimeout(() => board.classList.remove('shake-active'), 400);
 }
@@ -100,4 +101,23 @@ export function triggerFlash(color = "white") {
 
 export function setBackgroundPulse(color) {
     document.documentElement.style.setProperty('--glow', color);
+}
+
+// --- THIS IS THE MISSING FUNCTION CAUSING THE CRASH ---
+export function triggerChainFever() {
+    const text = document.getElementById('feverText');
+    const body = document.body;
+
+    if (text) {
+        text.classList.remove('active');
+        void text.offsetWidth; 
+        text.classList.add('active');
+    }
+
+    body.classList.add('fever-mode');
+    triggerShake(); 
+
+    setTimeout(() => {
+        body.classList.remove('fever-mode');
+    }, 2000);
 }

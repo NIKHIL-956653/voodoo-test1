@@ -5,12 +5,10 @@ import { SAGA_LEVELS, BLISS_LEVELS } from "./levels.js";
 import { makeAIMove } from "./ai.js";       
 import { makeSagaAIMove } from "./ai2.js"; 
 import { makeGreedyAIMove } from "./greedy.js"; 
-import { spawnParticles, triggerShake, triggerFlash, setBackgroundPulse } from "./fx.js"; 
-// 1. IMPORT STORAGE (Updated to include Theme functions)
+import { spawnParticles, triggerShake, triggerFlash, setBackgroundPulse, triggerChainFever } from "./fx.js"; 
 import { recordGameEnd, tryUnlockAchievement, loadData, saveTheme, getSavedTheme } from "./storage.js";
 
 const $ = s => document.querySelector(s);
-const scoreDisplay = $("#scoreDisplay");
 const boardEl = $("#board");
 const statusText = $("#statusText");
 const turnBadge = $("#turnBadge");
@@ -30,12 +28,17 @@ const timeLeftSpan = document.getElementById("timeLeft");
 const timerSelect = document.getElementById("timerSelect");
 const playerSettingsContainer = document.getElementById("playerSettingsContainer");
 
+// NEW HUD ELEMENTS
+const hudMessage = document.getElementById("hudMessage");
+const territoryMeter = document.getElementById("territoryMeter");
+
 // MODAL ELEMENTS
 const gameModal = document.getElementById("gameModal");
 const modalTitle = document.getElementById("modalTitle");
 const modalBody = document.getElementById("modalBody");
 const modalReplayBtn = document.getElementById("modalReplayBtn");
 const modalNextBtn = document.getElementById("modalNextBtn");
+const modalMenuBtn = document.getElementById("modalMenuBtn");
 
 let aiMoveDelay = 1000; 
 let rows = 9, cols = 9;
@@ -52,13 +55,12 @@ let levelMaxMoves = null;
 let playerMovesRemaining = 0; 
 let eliminationOrder = [];
 
-// NEW TRACKING VARIABLES
+// TRACKING VARIABLES
 let gameStartTime = 0;
 let lowestCellCount = Infinity; 
 let maxChainReaction = 0;       
 
 function init() {
-  // Hook up buttons
   const startBtn = document.getElementById('startGameBtn');
   if (startBtn) startBtn.addEventListener('click', startGame);
 
@@ -82,25 +84,19 @@ function init() {
       document.getElementById('statsModal').style.display = 'none';
   });
 
-  // --- NEW: THEME INIT LOGIC ---
   const themeSelect = document.getElementById('themeSelect');
-  
-  // 1. Load saved theme
   const savedTheme = getSavedTheme();
   if (savedTheme) {
       applyTheme(savedTheme);
       if (themeSelect) themeSelect.value = savedTheme;
   }
-
-  // 2. Listen for changes
   if (themeSelect) {
       themeSelect.addEventListener('change', (e) => {
           const newTheme = e.target.value;
           applyTheme(newTheme);
-          saveTheme(newTheme); // Save to storage
+          saveTheme(newTheme);
       });
   }
-  // -----------------------------
 
   playerCountSelect.addEventListener("change", () => {
       if (mode === 'normal' || mode === 'timeAttack') {
@@ -112,13 +108,8 @@ function init() {
       aiMoveDelay = parseInt(aiSpeedSelect.value, 10);
   });
 
-  gridSelect.addEventListener("change", () => {
-      // Don't reset immediately, just prepare settings
-  });
-
   modeSelect.addEventListener("change", handleModeChange);
   timerSelect.addEventListener("change", handleTimerChange);
-  
   levelSelect.addEventListener("change", (e) => {
       currentLevelIndex = parseInt(e.target.value, 10);
   });
@@ -127,6 +118,13 @@ function init() {
       closeModal();
       resetGame();
   });
+
+  if (modalMenuBtn) {
+      modalMenuBtn.addEventListener("click", () => {
+          closeModal();
+          backToMenu();
+      });
+  }
   
   modalNextBtn.addEventListener("click", () => {
       closeModal();
@@ -154,17 +152,12 @@ function init() {
   });
 }
 
-// --- NEW: THEME HELPER FUNCTION ---
 function applyTheme(themeName) {
-    // Remove all known theme classes first
     document.body.classList.remove('theme-cyberpunk', 'theme-magma', 'theme-matrix');
-    
-    // Add the new one (unless it's default)
     if (themeName !== 'default') {
         document.body.classList.add(themeName);
     }
 }
-// ----------------------------------
 
 function startGame() {
     document.getElementById('mainMenu').classList.remove('active');
@@ -184,13 +177,10 @@ function backToMenu() {
 function resizeBoard() {
     const container = document.querySelector('.board-container');
     if (!container) return;
-    
     const w = container.clientWidth;
     const h = container.clientHeight;
-    
     const sizeByWidth = (w - 20) / cols;
     const sizeByHeight = (h - 20) / rows;
-    
     const cellSize = Math.floor(Math.min(sizeByWidth, sizeByHeight)) - 2; 
     
     if (boardEl) {
@@ -254,7 +244,7 @@ function setupPlayers(count) {
         (triggerAI) => { 
             if(document.getElementById('gameView').classList.contains('active')) {
                 updateStatus(); 
-                renderScores(); 
+                updateScores(); // Calls meter update
                 if (triggerAI) processTurn();
                 else paintAll();
             }
@@ -289,13 +279,10 @@ function handleModeChange() {
     }
 }
 
-function handleTimerChange() {
-    // Just update variable
-}
+function handleTimerChange() {}
 
 function resetGame() {
   closeModal(); 
-
   gameStartTime = Date.now();
   lowestCellCount = Infinity;
   maxChainReaction = 0;
@@ -313,13 +300,11 @@ function resetGame() {
       const list = getActiveLevelList();
       if (!list[currentLevelIndex]) currentLevelIndex = 0;
       const level = list[currentLevelIndex];
-      
       initialCols = level.cols;
       initialRows = level.rows;
       blockedCoords = level.blocked || [];
       startSetup = level.setup || [];
       aiSetting = level.aiDifficulty;
-      
       levelMaxMoves = level.maxMoves || null;
       levelNameDisplay.textContent = level.name;
       
@@ -331,7 +316,6 @@ function resetGame() {
       } else {
           timerContainer.style.display = "none";
       }
-
   } else {
       const [c, r] = gridSelect.value.split("x").map(Number);
       initialCols = c;
@@ -351,9 +335,7 @@ function resetGame() {
   
   board = Array.from({ length: rows }, (_, y) =>
     Array.from({ length: cols }, (_, x) => ({ 
-        owner: -1, 
-        count: 0,
-        isBlocked: false 
+        owner: -1, count: 0, isBlocked: false 
     }))
   );
   
@@ -400,7 +382,6 @@ function resetGame() {
   
   paintAll();
   processTurn();
-  
   resizeBoard();
 }
 
@@ -427,10 +408,7 @@ function advanceTurn() {
       current = (current + 1) % players.length;
       loopCount++;
       if (loopCount > players.length) break; 
-      
-  } while (
-      firstMove[current] && scores[current] === 0
-  );
+  } while (firstMove[current] && scores[current] === 0);
 
   updateStatus(); 
   paintAll(true);
@@ -455,7 +433,6 @@ function processTurn() {
   
   aiTimeout = setTimeout(() => {
     let move;
-    
     if (p.difficulty === 'greedy') {
         move = makeGreedyAIMove(board, current, rows, cols); 
     } else if (mode === 'saga' || mode === 'bliss') {
@@ -463,7 +440,6 @@ function processTurn() {
     } else {
         move = makeAIMove(board, current, p.difficulty, rows, cols, players.length);
     }
-
     if (move) makeMove(move.x, move.y);
     else advanceTurn();
   }, aiMoveDelay);
@@ -473,15 +449,14 @@ function handleMove(x, y) {
   if (!playing) return;
   if (playerTypes[current].type === "ai") return;
   const cell = board[y][x];
-  
   if (cell.isBlocked) return;
   if (cell.owner !== -1 && cell.owner !== current) return;
-  
-  playSound("click");
   makeMove(x, y);
 }
 
 async function makeMove(x, y) {
+  playSound("click");
+
   history.push(JSON.stringify({ 
       board: board.map(row => row.map(c => ({...c}))),
       current, playing, firstMove: [...firstMove], scores: [...scores], movesMade,
@@ -507,13 +482,8 @@ async function makeMove(x, y) {
   if (playing && !won) advanceTurn();
 }
 
-// -------------------------------------------------------------
-// UPDATED RESOLVE REACTIONS (FIXES 15-SECOND DELAY)
-// -------------------------------------------------------------
 async function resolveReactions() {
   const q = [];
-  
-  // 1. Initial scan for unstable cells
   for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
         if (board[y][x].isBlocked) continue; 
@@ -525,7 +495,7 @@ async function resolveReactions() {
 
   const sleep = ms => new Promise(r => setTimeout(r, ms));
   let loopCount = 0;
-  const MAX_LOOPS = 600; // Safety break
+  const MAX_LOOPS = 600; 
 
   while (q.length) {
     loopCount++;
@@ -535,18 +505,26 @@ async function resolveReactions() {
     q.length = 0;
     const toInc = [];
 
-    // Achievement Tracking
     let reactionSize = wave.length;
     maxChainReaction += reactionSize;
-    if (maxChainReaction >= 50) {
-        tryUnlockAchievement('nuclear', 'Nuclear Launch', 'Trigger a reaction of 50+ atoms');
+
+    // --- REPLACED: NEW HUD NOTIFICATION FOR CHAIN FEVER ---
+    if (reactionSize >= 8 || (loopCount === 5 && maxChainReaction > 15)) {
+        // Show text in the bar instead of overlay
+        showGameNotification("CHAIN FEVER! ⚡", "#ff0"); 
+        triggerChainFever(); // Keeps screen shake/pulse but we handle text separately
+        await sleep(400); 
     }
 
-    // Effects
+    if (maxChainReaction >= 50) {
+        if (tryUnlockAchievement('nuclear', 'Nuclear Launch', '50+ atoms!')) {
+            showGameNotification("NUCLEAR LAUNCH! ☢️", "#f00");
+        }
+    }
+
     if (loopCount > 3) triggerShake(); 
     if (loopCount > 8) triggerFlash(players[current].color); 
 
-    // Process Wave
     for (const [x, y] of wave) {
       const cap = capacity(x, y, rows, cols);
       const cell = board[y][x];
@@ -555,10 +533,8 @@ async function resolveReactions() {
       cell.count -= cap;
       if (cell.count === 0) cell.owner = -1;
 
-      // Audio (limit to prevent ear-bleeding)
       if (loopCount < 15) playSound("explode");
 
-      // Visuals
       const cellIndex = y * cols + x;
       const cellElement = boardEl.children[cellIndex];
       if (cellElement) {
@@ -568,7 +544,6 @@ async function resolveReactions() {
           spawnParticles(centerX, centerY, players[current].color);
       }
 
-      // Logic: Spread to neighbors
       for (const [nx, ny] of neighbors(x, y, rows, cols, board)) { 
         const nc = board[ny][nx];
         nc.owner = current;
@@ -580,14 +555,9 @@ async function resolveReactions() {
     paintAll();
     for (const p of toInc) q.push(p);
 
-    // --- NEW: EARLY WIN DETECTION ---
-    // If we have made enough moves, check if everyone else is dead.
-    // If so, STOP the reaction immediately.
     if (movesMade > players.length * 2) {
         const activeOwners = new Set();
         let hasOrbs = false;
-        
-        // Quick scan of the board
         for(let r = 0; r < rows; r++) {
             for(let c = 0; c < cols; c++) {
                 if (!board[r][c].isBlocked && board[r][c].owner !== -1) {
@@ -596,16 +566,12 @@ async function resolveReactions() {
                 }
             }
         }
-
-        // If only 1 player remains, BREAK THE LOOP
         if (hasOrbs && activeOwners.size === 1) {
-            q.length = 0; // Clear remaining explosions
-            break;        // Exit the loop immediately
+            q.length = 0; 
+            break;        
         }
     }
-    // --------------------------------
 
-    // Dynamic Delay: Speed up as the reaction gets longer
     let delay = 120;
     if (loopCount > 5) delay = 60;
     if (loopCount > 15) delay = 10; 
@@ -628,34 +594,60 @@ function paintAll(isTurnChange = false) {
     }
 }
 
+// --- NEW FUNCTION: Update Territory Meter ---
 function updateScores() {
   scores = players.map(() => 0);
-  for (let y = 0; y < rows; y++)
+  let totalOrbs = 0;
+
+  for (let y = 0; y < rows; y++) {
     for (let x = 0; x < cols; x++) {
       if (board[y][x].isBlocked) continue; 
       const o = board[y][x].owner;
-      if (o !== -1) scores[o] += board[y][x].count;
+      if (o !== -1) {
+          scores[o] += board[y][x].count;
+          totalOrbs += board[y][x].count;
+      }
     }
+  }
 
   const myCells = scores[0]; 
   if (myCells > 0 && myCells < lowestCellCount) {
       lowestCellCount = myCells;
   }
 
-  renderScores();
+  // Update Meter UI
+  if (territoryMeter) {
+      territoryMeter.innerHTML = '';
+      if (totalOrbs > 0) {
+          players.forEach((p, i) => {
+              if (scores[i] > 0) {
+                  const pct = (scores[i] / totalOrbs) * 100;
+                  const bar = document.createElement('div');
+                  bar.className = 'meter-bar';
+                  bar.style.width = pct + '%';
+                  bar.style.backgroundColor = p.color;
+                  territoryMeter.appendChild(bar);
+              }
+          });
+      }
+  }
 }
 
 function renderScores() {
-  scoreDisplay.innerHTML = players
-    .map((p, i) => {
-      const isEliminated = eliminationOrder.includes(i);
-      const opacity = isEliminated ? "0.4" : "1";
-      const decoration = isEliminated ? "line-through" : "none";
-      return `<span style="color:${p.color}; opacity:${opacity}; text-decoration:${decoration}; font-weight:700; margin-right:12px;">
-         ${p.name || 'Player ' + (i+1)}: ${scores[i]}
-      </span>`;
-    })
-    .join("");
+    // This function is now mostly redundant visually but useful for debugging
+    // We keep it empty or minimal since the meter replaces it
+}
+
+// --- NEW FUNCTION: Show Messages in HUD ---
+function showGameNotification(text, color) {
+    if (!hudMessage) return;
+    hudMessage.textContent = text;
+    hudMessage.style.color = color || "#fff";
+    hudMessage.classList.add('active');
+    
+    setTimeout(() => {
+        hudMessage.classList.remove('active');
+    }, 2000);
 }
 
 function updateStatus(extra) {
@@ -680,7 +672,7 @@ function undoMove() {
   }
   
   closeModal(); 
-  paintAll(true); updateStatus(); renderScores();
+  paintAll(true); updateStatus(); updateScores();
 }
 
 function launchConfetti(color) {
@@ -708,11 +700,9 @@ function checkWin() {
       if (alive.length === 1) {
           if (alive[0].idx === 0) {
             playing = false;
-            
             if (playerTypes[1] && playerTypes[1].type === 'ai') {
                 recordGameEnd(0, playerTypes[1].difficulty);
             }
-
             showGameOver("Level Complete!", "Excellent strategy! You defeated the AI.", true);
             playSound("win");
             launchConfetti(players[0].color);
@@ -758,7 +748,6 @@ function checkWin() {
           if (timeTaken < 60) {
               tryUnlockAchievement('speed', 'Speed Demon', 'Win a game in under 60 seconds');
           }
-      
           if (lowestCellCount <= 1) {
               tryUnlockAchievement('underdog', 'Underdog', 'Win after dropping to 1 orb');
           }
@@ -767,7 +756,6 @@ function checkWin() {
       }
       
       let rankText = `🏆 <b>${winnerName} Wins!</b><br><br>`;
-      
       if (players.length > 2) {
           if (eliminationOrder.length > 0) {
               const secondIdx = eliminationOrder[eliminationOrder.length - 1];
@@ -794,7 +782,6 @@ function checkWin() {
 function showStats() {
     const data = loadData();
     const body = document.getElementById('statsBody');
-    
     const isUn = (id) => data.achievements.includes(id) ? 'unlocked' : '';
     
     body.innerHTML = `
@@ -812,7 +799,6 @@ function showStats() {
             <span class="ach-tag ${isUn('underdog')}">🐕 Underdog</span>
         </div>
     `;
-    
     document.getElementById('statsModal').style.display = 'flex';
 }
 
